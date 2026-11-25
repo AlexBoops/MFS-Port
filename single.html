@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en-us">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Google Docs</title>
+  <link rel="icon" href="https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico">
+  <link rel="shortcut icon" href="https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico">
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overscroll-behavior: none;
+    }
+
+    #canvas,
+    #overlayDiv {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 0 none;
+    }
+
+    #canvas {
+      background: #000;
+    }
+
+    .visible {
+      visibility: visible;
+      opacity: 1.0;
+      transition: opacity .1s linear;
+    }
+
+    .hidden {
+      visibility: hidden;
+      opacity: 0;
+      transition: visibility 0s .25s, opacity .25s linear;
+    }
+
+    #loading-text {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      color: #ffffff;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-align: center;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+      pointer-events: none;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #statusDiv,
+    #inputDiv {
+      background: rgba(0, 0, 0, 0.8);
+      width: 50%;
+      margin: auto;
+      min-width: 340px;
+      padding: 10px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      border-radius: 0 0 5px 5px;
+      z-index: 15;
+    }
+
+    #statusTextDiv {
+      overflow: auto;
+      max-height: 40vh;
+      color: #ccc;
+      font-size: 14px;
+    }
+
+    #statusProgress {
+      display: none;
+      width: 100%;
+    }
+
+    #inputDiv {
+      width: 65%;
+      padding-left: 10px;
+      padding-right: 20px;
+    }
+
+    #inputPrompt {
+      color: #eee;
+      font-size: 150%;
+      margin-bottom: 1em;
+      margin-top: 1em;
+    }
+
+    #inputText {
+      width: 100%;
+      font-size: 175%;
+      padding: 5px;
+      background: inherit;
+      color: #eee;
+    }
+
+    #inputText:focus {
+      color: #ffffff;
+    }
+
+    #ContextContainer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: white;
+      z-index: 15;
+    }
+
+    #ContextContainer.shown {
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 0 0 5px 0;
+    }
+
+    #ContextButton {
+      text-decoration: none;
+      color: lightgrey;
+      font-size: xx-large;
+      cursor: pointer;
+      user-select: none;
+      -moz-user-select: none;
+      padding: 10px;
+      opacity: .75;
+    }
+
+    #ContextButton:focus {
+      outline: none;
+      color: #ffffff;
+      opacity: 1.0;
+    }
+
+    #ContextMenu a {
+      text-decoration: none;
+      color: lightgrey;
+      background: #333;
+      height: 44px;
+      width: 220px;
+      border-radius: 5px;
+      border: 1px solid lightgrey;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 5px;
+      opacity: 1.0;
+    }
+
+    #ContextMenu a:hover {
+      text-decoration: none;
+      background: #555;
+      color: #ffffff;
+    }
+
+    #presplash {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: block;
+      margin: auto;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    #hud-bar {
+      position: fixed !important;
+      top: 12px !important;
+      right: 12px !important;
+      display: flex !important;
+      gap: 8px !important;
+      z-index: 2147483647 !important;
+      opacity: 0.65;
+      transition: opacity 0.2s ease;
+      pointer-events: auto !important;
+    }
+
+    #hud-bar:hover {
+      opacity: 1;
+    }
+
+    .hud-btn {
+      background: rgba(18, 18, 22, 0.92) !important;
+      color: #fff !important;
+      border: 1px solid rgba(250, 204, 21, 0.75) !important;
+      border-radius: 6px !important;
+      padding: 6px 12px !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.5px !important;
+      cursor: pointer !important;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .hud-btn:hover {
+      background: #facc15 !important;
+      color: #111 !important;
+      border-color: #facc15 !important;
+    }
+  </style>
+
+  <script>
+    (function () {
+      const DOCS_TITLE = "Google Docs";
+      const DOCS_ICON = "https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico";
+
+      function ensureCloak(doc) {
+        const d = doc || document;
+        try {
+          if (d.title !== DOCS_TITLE) d.title = DOCS_TITLE;
+          let link = d.querySelector('link[rel="icon"]');
+          if (!link) {
+            link = d.createElement("link");
+            link.rel = "icon";
+            link.href = DOCS_ICON;
+            (d.head || d.documentElement).appendChild(link);
+          } else if (link.href !== DOCS_ICON) {
+            link.href = DOCS_ICON;
+          }
+        } catch (e) {}
+      }
+
+      function ensureHud() {
+        if (!document.body) return;
+        let hud = document.getElementById("hud-bar");
+        if (!hud) {
+          hud = document.createElement("div");
+          hud.id = "hud-bar";
+          hud.innerHTML =
+            '<button class="hud-btn" id="btn-ab" onclick="openCloakedWindow()">about:blank</button>' +
+            '<button class="hud-btn" id="btn-fs" onclick="toggleFullscreen()">Fullscreen</button>';
+          document.body.appendChild(hud);
+        } else if (hud.parentNode !== document.body || document.body.lastElementChild !== hud) {
+          document.body.appendChild(hud);
+        }
+      }
+
+      ensureCloak(document);
+      window.addEventListener("DOMContentLoaded", () => {
+        ensureCloak(document);
+        ensureHud();
+      });
+      window.addEventListener("load", () => {
+        ensureCloak(document);
+        ensureHud();
+      });
+      setInterval(() => {
+        ensureCloak(document);
+        ensureHud();
+      }, 500);
+    })();
+
+    function openCloakedWindow() {
+      const btn = document.getElementById("btn-ab");
+      const win = window.open("about:blank", "_blank");
+      if (!win || win.closed) {
+        if (btn) {
+          btn.textContent = "Allow Popups!";
+          setTimeout(() => {
+            btn.textContent = "about:blank";
+          }, 3000);
+        }
+        return;
+      }
+
+      try {
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelectorAll("#hud-bar").forEach((el) => el.remove());
+        win.document.open();
+        win.document.write("<!doctype html>\n" + clone.outerHTML);
+        win.document.close();
+        win.document.title = "Google Docs";
+      } catch (e) {}
+    }
+
+    function toggleFullscreen() {
+      const target = document.documentElement;
+      if (!document.fullscreenElement) {
+        const req =
+          target.requestFullscreen ||
+          target.webkitRequestFullscreen ||
+          target.mozRequestFullScreen ||
+          target.msRequestFullscreen;
+        if (req) Promise.resolve(req.call(target)).catch(() => {});
+      } else {
+        const exit =
+          document.exitFullscreen ||
+          document.webkitExitFullscreen ||
+          document.mozCancelFullScreen ||
+          document.msExitFullscreen;
+        if (exit) Promise.resolve(exit.call(target)).catch(() => {});
+      }
+    }
+  </script>
+</head>
+
+<body>
+  <div id="hud-bar">
+    <button class="hud-btn" id="btn-ab" onclick="openCloakedWindow()">about:blank</button>
+    <button class="hud-btn" id="btn-fs" onclick="toggleFullscreen()">Fullscreen</button>
+  </div>
+
+  <div id="loading-text">LOADING... (0/6)</div>
+
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="overlayDiv"></div>
+
+  <img id="presplash" src="https://rawcdn.githack.com/AlexBoops/MFS-Port/main/web-presplash.jpg" alt="">
+
+  <div id="ContextContainer">
+    <a id="ContextButton">&#8801;</a><br />
+    <div id="ContextMenu" style="display: none;">
+      <input id="ID_SavegamesImport" type="file" onchange="onSavegamesImport(this)" accept="application/zip" style="display:none">
+      <a href="javascript:document.getElementById('ID_SavegamesImport').click();">Import Saves</a>
+      <a href="javascript:onSavegamesExport();">Export Saves</a>
+      <a href="javascript:FSDownload('/log.txt', 'text/plain');">Download Log</a>
+    </div>
+  </div>
+
+  <div id="statusDiv" class="hidden">
+    <div id="statusTextDiv"></div>
+    <progress id="statusProgress" value="0" max="100"></progress>
+  </div>
+
+  <div id="inputDiv" class="hidden">
+    <form id="inputForm">
+      <div id="inputPrompt"></div>
+      <input id="inputText" type="text">
+    </form>
+  </div>
+
+  <script>
+    const CDN_GITHACK = "https://rawcdn.githack.com/AlexBoops/MFS-Port/main/";
+    const CDN_JSDELIVR = "https://cdn.jsdelivr.net/gh/AlexBoops/MFS-Port@main/";
+    const loadingtext = document.getElementById("loading-text");
+
+    let doneparts = 0;
+    let maxparts = 0;
+
+    function getParts(file, start, end) {
+      const parts = [];
+      for (let i = start; i <= end; i++) {
+        parts.push(file + ".part" + i);
+      }
+      maxparts += parts.length;
+      loadingtext.textContent = `LOADING... (${doneparts}/${maxparts})`;
+      return parts;
+    }
+
+    const baseFetch = window.fetch.bind(window);
+
+    function toGithack(url) {
+      if (typeof url !== "string") return url;
+      if (/^(blob:|data:)/i.test(url)) return url;
+      if (url.startsWith(CDN_JSDELIVR)) {
+        return CDN_GITHACK + url.slice(CDN_JSDELIVR.length);
+      }
+      const cleanPath = url.split("?")[0].split("#")[0];
+      const fileName = cleanPath.split("/").pop();
+      if (fileName === "renpy.wasm" && window.renpyWasmURL) return window.renpyWasmURL;
+      if (fileName === "game.zip" && window.gameZipURL) return window.gameZipURL;
+
+      const gameImagesIdx = cleanPath.indexOf("game/images/");
+      if (gameImagesIdx !== -1) {
+        return CDN_GITHACK + cleanPath.slice(gameImagesIdx);
+      }
+      if (fileName && /^(renpy\.js|renpy-pre\.js|renpy\.data|web-presplash\.jpg|pwa_catalog\.json|manifest\.json)$/i.test(fileName)) {
+        return CDN_GITHACK + fileName;
+      }
+      if (!/^(https?:\/\/)/i.test(url)) {
+        return CDN_GITHACK + url.replace(/^\.?\//, "");
+      }
+      return url;
+    }
+
+    function toJsdelivr(url) {
+      if (typeof url !== "string") return url;
+      if (url.startsWith(CDN_GITHACK)) {
+        return CDN_JSDELIVR + url.slice(CDN_GITHACK.length);
+      }
+      return url;
+    }
+
+    async function fetchPartWithFallback(relPath) {
+      const urls = [CDN_GITHACK + relPath, CDN_JSDELIVR + relPath];
+      let lastErr;
+      for (const url of urls) {
+        try {
+          const res = await baseFetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+          return await res.arrayBuffer();
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr;
+    }
+
+    async function mergeFiles(fileParts, mimeType) {
+      const buffers = new Array(fileParts.length);
+      let nextIndex = 0;
+      const concurrency = 4;
+
+      async function worker() {
+        while (nextIndex < fileParts.length) {
+          const idx = nextIndex++;
+          buffers[idx] = await fetchPartWithFallback(fileParts[idx]);
+          doneparts++;
+          loadingtext.textContent = `LOADING... (${doneparts}/${maxparts})`;
+        }
+      }
+
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      const mergedBlob = new Blob(buffers, { type: mimeType });
+      return URL.createObjectURL(mergedBlob);
+    }
+
+    // Route fetch through githack first, falling back to jsDelivr if githack fails
+    window.fetch = async function (input, init) {
+      const rawUrl = typeof input === "string" ? input : (input && input.url) || "";
+      const primaryUrl = toGithack(rawUrl);
+      const fallbackUrl = toJsdelivr(primaryUrl);
+
+      try {
+        const res =
+          input instanceof Request && primaryUrl !== rawUrl
+            ? await baseFetch(new Request(primaryUrl, input), init)
+            : await baseFetch(primaryUrl, init);
+        if (res.ok || fallbackUrl === primaryUrl) return res;
+      } catch (e) {
+        if (fallbackUrl === primaryUrl) throw e;
+      }
+
+      if (input instanceof Request) {
+        return baseFetch(new Request(fallbackUrl, input), init);
+      }
+      return baseFetch(fallbackUrl, init);
+    };
+
+    // Route XMLHttpRequest through githack first
+    const origXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      return origXhrOpen.call(this, method, toGithack(url), ...rest);
+    };
+
+    window.Module = window.Module || {};
+    const prevLocateFile = window.Module.locateFile;
+    window.Module.locateFile = function (path, prefix) {
+      if (typeof path === "string" && path.endsWith("renpy.wasm") && window.renpyWasmURL) {
+        return window.renpyWasmURL;
+      }
+      if (typeof prevLocateFile === "function") {
+        return prevLocateFile(path, prefix);
+      }
+      return toGithack(path);
+    };
+
+    Promise.all([
+      mergeFiles(getParts("game.zip", 1, 4), "application/zip"),
+      mergeFiles(getParts("renpy.wasm", 1, 2), "application/wasm")
+    ])
+      .then(([zipUrl, wasmUrl]) => {
+        window.gameZipURL = zipUrl;
+        window.renpyWasmURL = wasmUrl;
+
+        const renpypre = document.createElement("script");
+        renpypre.src = CDN_GITHACK + "renpy-pre.js";
+        renpypre.onload = () => {
+          const renpy = document.createElement("script");
+          renpy.src = CDN_GITHACK + "renpy.js";
+          document.body.appendChild(renpy);
+          loadingtext.remove();
+        };
+        document.body.appendChild(renpypre);
+      })
+      .catch((err) => {
+        loadingtext.textContent = "FAILED TO LOAD: " + (err && err.message ? err.message : err);
+      });
+  </script>
+</body>
+
+</html>
